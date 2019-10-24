@@ -24,11 +24,8 @@
 #pragma SWIG nowarn=341
 #pragma SWIG nowarn=512
 
-
-typedef unsigned long uint64_t;
-typedef uint64_t size_t;
-typedef int int32_t;
-typedef unsigned char uint8_t;
+%include <stdint.i>
+typedef int64_t size_t;
 
 #define __restrict
 
@@ -71,45 +68,103 @@ extern "C" {
 #endif
 
 
-#include "IndexFlat.h"
-#include "VectorTransform.h"
-#include "IndexLSH.h"
-#include "IndexPQ.h"
-#include "IndexIVF.h"
-#include "IndexIVFPQ.h"
-#include "IndexIVFFlat.h"
-#include "IndexScalarQuantizer.h"
-#include "IndexIVFSpectralHash.h"
-#include "ThreadedIndex.h"
-#include "IndexShards.h"
-#include "IndexReplicas.h"
-#include "HNSW.h"
-#include "IndexHNSW.h"
-#include "MetaIndexes.h"
-#include "FaissAssert.h"
+#include <faiss/IndexFlat.h>
+#include <faiss/VectorTransform.h>
+#include <faiss/IndexPreTransform.h>
+#include <faiss/IndexLSH.h>
+#include <faiss/IndexPQ.h>
+#include <faiss/IndexIVF.h>
+#include <faiss/IndexIVFPQ.h>
+#include <faiss/Index2Layer.h>
+#include <faiss/IndexIVFPQR.h>
+#include <faiss/IndexIVFFlat.h>
+#include <faiss/IndexScalarQuantizer.h>
+#include <faiss/IndexIVFSpectralHash.h>
+#include <faiss/impl/ThreadedIndex.h>
+#include <faiss/IndexShards.h>
+#include <faiss/IndexReplicas.h>
+#include <faiss/impl/HNSW.h>
+#include <faiss/IndexHNSW.h>
+#include <faiss/MetaIndexes.h>
+#include <faiss/impl/FaissAssert.h>
 
-#include "IndexBinaryFlat.h"
-#include "IndexBinaryIVF.h"
-#include "IndexBinaryFromFloat.h"
-#include "IndexBinaryHNSW.h"
+#include <faiss/IndexBinaryFlat.h>
+#include <faiss/IndexBinaryIVF.h>
+#include <faiss/IndexBinaryFromFloat.h>
+#include <faiss/IndexBinaryHNSW.h>
 
-#include "index_io.h"
+#include <faiss/impl/io.h>
+#include <faiss/index_io.h>
+#include <faiss/clone_index.h>
 
-#include "IVFlib.h"
-#include "utils.h"
-#include "Heap.h"
-#include "AuxIndexStructures.h"
-#include "OnDiskInvertedLists.h"
+#include <faiss/IVFlib.h>
+#include <faiss/utils/utils.h>
+#include <faiss/utils/distances.h>
+#include <faiss/utils/extra_distances.h>
+#include <faiss/utils/random.h>
+#include <faiss/utils/Heap.h>
+#include <faiss/impl/AuxIndexStructures.h>
+#include <faiss/OnDiskInvertedLists.h>
 
-#include "Clustering.h"
+#include <faiss/Clustering.h>
 
-#include "hamming.h"
+#include <faiss/utils/hamming.h>
 
-#include "AutoTune.h"
+#include <faiss/AutoTune.h>
+#include <faiss/MatrixStats.h>
+#include <faiss/index_factory.h>
+
+#include <faiss/impl/lattice_Zn.h>
+#include <faiss/IndexLattice.h>
 
 
+%}
 
- %}
+/********************************************************
+ * GIL manipulation and exception handling
+ ********************************************************/
+
+#ifdef SWIGPYTHON
+// %catches(faiss::FaissException);
+
+
+// Python-specific: release GIL by default for all functions
+%exception {
+    Py_BEGIN_ALLOW_THREADS
+    try {
+        $action
+    } catch(faiss::FaissException & e) {
+        PyEval_RestoreThread(_save);
+
+        if (PyErr_Occurred()) {
+            // some previous code already set the error type.
+        } else {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        }
+        SWIG_fail;
+    } catch(std::bad_alloc & ba) {
+        PyEval_RestoreThread(_save);
+        PyErr_SetString(PyExc_MemoryError, "std::bad_alloc");
+        SWIG_fail;
+    }
+    Py_END_ALLOW_THREADS
+}
+
+#endif
+
+#ifdef SWIGLUA
+
+%exception {
+    try {
+        $action
+    } catch(faiss::FaissException & e) {
+        SWIG_Lua_pushferrstring(L, "C++ exception: %s", e.what());       \
+        goto fail;
+    }
+}
+
+#endif
+
 
 /*******************************************************************
  * Types of vectors we want to manipulate at the scripting language
@@ -144,14 +199,13 @@ namespace std {
 %template(Uint64Vector) std::vector<unsigned long>;
 %template(LongVector) std::vector<long>;
 %template(IntVector) std::vector<int>;
-%template(VectorTransformVector) std::vector<faiss::VectorTransform*>;
-%template(OperatingPointVector) std::vector<faiss::OperatingPoint>;
-%template(InvertedListsPtrVector) std::vector<faiss::InvertedLists*>;
 %template(FloatVectorVector) std::vector<std::vector<float> >;
 %template(ByteVectorVector) std::vector<std::vector<unsigned char> >;
 %template(LongVectorVector) std::vector<std::vector<long> >;
-
-
+%template(VectorTransformVector) std::vector<faiss::VectorTransform*>;
+%template(OperatingPointVector) std::vector<faiss::OperatingPoint>;
+%template(InvertedListsPtrVector) std::vector<faiss::InvertedLists*>;
+%template(RepeatVector) std::vector<faiss::Repeat>;
 
 #ifdef GPU_WRAPPER
 %template(GpuResourcesVector) std::vector<faiss::gpu::GpuResources*>;
@@ -162,77 +216,58 @@ namespace std {
 // produces an error on the Mac
 %ignore faiss::hamming;
 
-
 /*******************************************************************
  * Parse headers
  *******************************************************************/
 
-#ifdef SWIGPYTHON
-// %catches(faiss::FaissException);
-
-
-// Python-specific: release GIL by default for all functions
-%exception {
-    Py_BEGIN_ALLOW_THREADS
-    try {
-        $action
-    } catch(faiss::FaissException & e) {
-        PyEval_RestoreThread(_save);
-
-        if (PyErr_Occurred()) {
-            // some previous code already set the error type.
-        } else {
-            PyErr_SetString(PyExc_RuntimeError, e.what());
-        }
-        SWIG_fail;
-    }
-    Py_END_ALLOW_THREADS
-}
-
-#endif
-
-#ifdef SWIGLUA
-
-%exception {
-    try {
-        $action
-    } catch(faiss::FaissException & e) {
-        SWIG_Lua_pushferrstring(L, "C++ exception: %s", e.what());       \
-        goto fail;
-    }
-}
-
-#endif
-
-
 
 %ignore *::cmp;
 
-%include "Heap.h"
-%include "hamming.h"
+%include  <faiss/utils/Heap.h>
+%include  <faiss/utils/hamming.h>
 
 int get_num_gpus();
+void gpu_profiler_start();
+void gpu_profiler_stop();
+void gpu_sync_all_devices();
 
 #ifdef GPU_WRAPPER
 
 %{
 
-#include "gpu/StandardGpuResources.h"
-#include "gpu/GpuIndicesOptions.h"
-#include "gpu/GpuClonerOptions.h"
-#include "gpu/utils/MemorySpace.h"
-#include "gpu/GpuIndex.h"
-#include "gpu/GpuIndexFlat.h"
-#include "gpu/GpuIndexIVF.h"
-#include "gpu/GpuIndexIVFPQ.h"
-#include "gpu/GpuIndexIVFFlat.h"
-#include "gpu/GpuIndexBinaryFlat.h"
-#include "gpu/GpuAutoTune.h"
-#include "gpu/GpuDistance.h"
+#include <faiss/gpu/StandardGpuResources.h>
+#include <faiss/gpu/GpuIndicesOptions.h>
+#include <faiss/gpu/GpuClonerOptions.h>
+#include <faiss/gpu/utils/MemorySpace.h>
+#include <faiss/gpu/GpuIndex.h>
+#include <faiss/gpu/GpuIndexFlat.h>
+#include <faiss/gpu/GpuIndexIVF.h>
+#include <faiss/gpu/GpuIndexIVFPQ.h>
+#include <faiss/gpu/GpuIndexIVFFlat.h>
+#include <faiss/gpu/GpuIndexIVFScalarQuantizer.h>
+#include <faiss/gpu/GpuIndexBinaryFlat.h>
+#include <faiss/gpu/GpuAutoTune.h>
+#include <faiss/gpu/GpuCloner.h>
+#include <faiss/gpu/GpuDistance.h>
 
 int get_num_gpus()
 {
     return faiss::gpu::getNumDevices();
+}
+
+void gpu_profiler_start()
+{
+    return faiss::gpu::profilerStart();
+}
+
+void gpu_profiler_stop()
+{
+    return faiss::gpu::profilerStop();
+}
+
+void gpu_sync_all_devices()
+{
+    return faiss::gpu::synchronizeAllDevices();
 }
 
 %}
@@ -241,8 +276,8 @@ int get_num_gpus()
 %ignore *::getMemoryManager;
 %ignore *::getMemoryManagerCurrentDevice;
 
-%include "gpu/GpuResources.h"
-%include "gpu/StandardGpuResources.h"
+%include  <faiss/gpu/GpuResources.h>
+%include  <faiss/gpu/StandardGpuResources.h>
 
 #else
 
@@ -251,84 +286,121 @@ int get_num_gpus()
 {
     return 0;
 }
+
+void gpu_profiler_start()
+{
+}
+
+void gpu_profiler_stop()
+{
+}
+
+void gpu_sync_all_devices()
+{
+}
 %}
 
 
 #endif
 
+// order matters because includes are not recursive
 
-%include "utils.h"
+%include  <faiss/utils/utils.h>
+%include  <faiss/utils/distances.h>
+%include  <faiss/utils/random.h>
 
-%include "Index.h"
-%include "Clustering.h"
+%include  <faiss/Index.h>
+%include  <faiss/Clustering.h>
+
+%include  <faiss/utils/extra_distances.h>
 
 %ignore faiss::ProductQuantizer::get_centroids(size_t,size_t) const;
 
-%include "ProductQuantizer.h"
+%include  <faiss/impl/ProductQuantizer.h>
 
-%include "VectorTransform.h"
-%include "IndexFlat.h"
-%include "IndexLSH.h"
-%include "PolysemousTraining.h"
-%include "IndexPQ.h"
-%include "InvertedLists.h"
+%include  <faiss/VectorTransform.h>
+%include  <faiss/IndexPreTransform.h>
+%include  <faiss/IndexFlat.h>
+%include  <faiss/IndexLSH.h>
+%include  <faiss/impl/PolysemousTraining.h>
+%include  <faiss/IndexPQ.h>
+%include  <faiss/InvertedLists.h>
 %ignore InvertedListScanner;
 %ignore BinaryInvertedListScanner;
-%include "IndexIVF.h"
+%include  <faiss/IndexIVF.h>
 // NOTE(hoss): SWIG (wrongly) believes the overloaded const version shadows the
 //   non-const one.
 %warnfilter(509) extract_index_ivf;
-%include "IVFlib.h"
-%include "IndexScalarQuantizer.h"
-%include "IndexIVFSpectralHash.h"
-%include "HNSW.h"
-%include "IndexHNSW.h"
-%include "IndexIVFFlat.h"
-%include "OnDiskInvertedLists.h"
+%include  <faiss/IVFlib.h>
+%include  <faiss/impl/ScalarQuantizer.h>
+%include  <faiss/IndexScalarQuantizer.h>
+%include  <faiss/IndexIVFSpectralHash.h>
+%include  <faiss/impl/HNSW.h>
+%include  <faiss/IndexHNSW.h>
+%include  <faiss/IndexIVFFlat.h>
+%include  <faiss/OnDiskInvertedLists.h>
+
+%include  <faiss/impl/lattice_Zn.h>
+%include  <faiss/IndexLattice.h>
 
 %ignore faiss::IndexIVFPQ::alloc_type;
-%include "IndexIVFPQ.h"
+%include  <faiss/IndexIVFPQ.h>
+%include  <faiss/IndexIVFPQR.h>
+%include  <faiss/Index2Layer.h>
 
-%include "IndexBinary.h"
-%include "IndexBinaryFlat.h"
-%include "IndexBinaryIVF.h"
-%include "IndexBinaryFromFloat.h"
-%include "IndexBinaryHNSW.h"
+%include  <faiss/IndexBinary.h>
+%include  <faiss/IndexBinaryFlat.h>
+%include  <faiss/IndexBinaryIVF.h>
+%include  <faiss/IndexBinaryFromFloat.h>
+%include  <faiss/IndexBinaryHNSW.h>
 
 
 
  // %ignore faiss::IndexReplicas::at(int) const;
 
-%include "ThreadedIndex.h"
+%include  <faiss/impl/ThreadedIndex.h>
 %template(ThreadedIndexBase) faiss::ThreadedIndex<faiss::Index>;
 %template(ThreadedIndexBaseBinary) faiss::ThreadedIndex<faiss::IndexBinary>;
 
-%include "IndexShards.h"
+%include  <faiss/IndexShards.h>
 %template(IndexShards) faiss::IndexShardsTemplate<faiss::Index>;
 %template(IndexBinaryShards) faiss::IndexShardsTemplate<faiss::IndexBinary>;
 
-%include "IndexReplicas.h"
+%include  <faiss/IndexReplicas.h>
 %template(IndexReplicas) faiss::IndexReplicasTemplate<faiss::Index>;
 %template(IndexBinaryReplicas) faiss::IndexReplicasTemplate<faiss::IndexBinary>;
 
-
-%include "MetaIndexes.h"
+%include  <faiss/MetaIndexes.h>
+%template(IndexIDMap) faiss::IndexIDMapTemplate<faiss::Index>;
+%template(IndexBinaryIDMap) faiss::IndexIDMapTemplate<faiss::IndexBinary>;
+%template(IndexIDMap2) faiss::IndexIDMap2Template<faiss::Index>;
+%template(IndexBinaryIDMap2) faiss::IndexIDMap2Template<faiss::IndexBinary>;
 
 #ifdef GPU_WRAPPER
 
 // quiet SWIG warnings
 %ignore faiss::gpu::GpuIndexIVF::GpuIndexIVF;
 
-%include "gpu/GpuIndicesOptions.h"
-%include "gpu/GpuClonerOptions.h"
-%include "gpu/utils/MemorySpace.h"
-%include "gpu/GpuIndex.h"
-%include "gpu/GpuIndexFlat.h"
-%include "gpu/GpuIndexIVF.h"
-%include "gpu/GpuIndexIVFPQ.h"
-%include "gpu/GpuIndexIVFFlat.h"
-%include "gpu/GpuIndexBinaryFlat.h"
-%include "gpu/GpuDistance.h"
+%include  <faiss/gpu/GpuIndicesOptions.h>
+%include  <faiss/gpu/GpuClonerOptions.h>
+%include  <faiss/gpu/utils/MemorySpace.h>
+%include  <faiss/gpu/GpuIndex.h>
+%include  <faiss/gpu/GpuIndexFlat.h>
+%include  <faiss/gpu/GpuIndexIVF.h>
+%include  <faiss/gpu/GpuIndexIVFPQ.h>
+%include  <faiss/gpu/GpuIndexIVFFlat.h>
+%include  <faiss/gpu/GpuIndexIVFScalarQuantizer.h>
+%include  <faiss/gpu/GpuIndexBinaryFlat.h>
+%include  <faiss/gpu/GpuDistance.h>
+
+#ifdef SWIGLUA
+
+/// in Lua, swigfaiss_gpu is known as swigfaiss
+%luacode {
+local swigfaiss = swigfaiss_gpu
+}
+
+#endif
 
 
 #endif
@@ -478,7 +550,8 @@ struct AsyncIndexSearchC {
 
 // Subclasses should appear before their parent
 %typemap(out) faiss::Index * {
-    DOWNCAST ( IndexIDMap )
+    DOWNCAST2 ( IndexIDMap, IndexIDMapTemplateT_faiss__Index_t )
+    DOWNCAST2 ( IndexIDMap2, IndexIDMap2TemplateT_faiss__Index_t )
     DOWNCAST2 ( IndexShards, IndexShardsTemplateT_faiss__Index_t )
     DOWNCAST2 ( IndexReplicas, IndexReplicasTemplateT_faiss__Index_t )
     DOWNCAST ( IndexIVFPQR )
@@ -492,6 +565,7 @@ struct AsyncIndexSearchC {
     DOWNCAST ( IndexPQ )
     DOWNCAST ( IndexScalarQuantizer )
     DOWNCAST ( IndexLSH )
+    DOWNCAST ( IndexLattice )
     DOWNCAST ( IndexPreTransform )
     DOWNCAST ( MultiIndexQuantizer )
     DOWNCAST ( IndexHNSWFlat )
@@ -502,6 +576,7 @@ struct AsyncIndexSearchC {
 #ifdef GPU_WRAPPER
     DOWNCAST_GPU ( GpuIndexIVFPQ )
     DOWNCAST_GPU ( GpuIndexIVFFlat )
+    DOWNCAST_GPU ( GpuIndexIVFScalarQuantizer )
     DOWNCAST_GPU ( GpuIndexFlat )
 #endif
     // default for non-recognized classes
@@ -522,6 +597,8 @@ struct AsyncIndexSearchC {
 
 %typemap(out) faiss::IndexBinary * {
     DOWNCAST2 ( IndexBinaryReplicas, IndexReplicasTemplateT_faiss__IndexBinary_t )
+    DOWNCAST2 ( IndexBinaryIDMap, IndexIDMapTemplateT_faiss__IndexBinary_t )
+    DOWNCAST2 ( IndexBinaryIDMap2, IndexIDMap2TemplateT_faiss__IndexBinary_t )
     DOWNCAST ( IndexBinaryIVF )
     DOWNCAST ( IndexBinaryFlat )
     DOWNCAST ( IndexBinaryFromFloat )
@@ -598,22 +675,27 @@ faiss::InvertedLists * downcast_InvertedLists (faiss::InvertedLists *il)
 }
 %}
 
-
-%include "index_io.h"
+%include  <faiss/impl/io.h>
+%include  <faiss/index_io.h>
+%include  <faiss/clone_index.h>
 
 %newobject index_factory;
 %newobject index_binary_factory;
 
-%include "AutoTune.h"
+%include  <faiss/AutoTune.h>
+%include  <faiss/index_factory.h>
+%include  <faiss/MatrixStats.h>
 
 
 #ifdef GPU_WRAPPER
+
+%include  <faiss/gpu/GpuAutoTune.h>
 
 %newobject index_gpu_to_cpu;
 %newobject index_cpu_to_gpu;
 %newobject index_cpu_to_gpu_multiple;
 
-%include "gpu/GpuAutoTune.h"
+%include  <faiss/gpu/GpuCloner.h>
 
 #endif
 
@@ -663,10 +745,18 @@ PyObject *swig_ptr (PyObject *a)
         return SWIG_NewPointerObj(data, SWIGTYPE_p_char, 0);
     }
     if(PyArray_TYPE(ao) == NPY_UINT64) {
+#ifdef SWIGWORDSIZE64
         return SWIG_NewPointerObj(data, SWIGTYPE_p_unsigned_long, 0);
+#else
+        return SWIG_NewPointerObj(data, SWIGTYPE_p_unsigned_long_long, 0);
+#endif
     }
     if(PyArray_TYPE(ao) == NPY_INT64) {
+#ifdef SWIGWORDSIZE64
         return SWIG_NewPointerObj(data, SWIGTYPE_p_long, 0);
+#else
+        return SWIG_NewPointerObj(data, SWIGTYPE_p_long_long, 0);
+#endif
     }
     PyErr_SetString(PyExc_ValueError, "did not recognize array type");
     return NULL;
@@ -718,9 +808,8 @@ PyObject * rev_swig_ptr(ctype *src, size_t size);
 REV_SWIG_PTR(float, NPY_FLOAT32);
 REV_SWIG_PTR(int, NPY_INT32);
 REV_SWIG_PTR(unsigned char, NPY_UINT8);
-REV_SWIG_PTR(unsigned long, NPY_UINT64);
-REV_SWIG_PTR(long, NPY_INT64);
-
+REV_SWIG_PTR(int64_t, NPY_INT64);
+REV_SWIG_PTR(uint64_t, NPY_UINT64);
 
 #endif
 
@@ -784,16 +873,16 @@ TYPE_CONVERSION (uint8_t, ByteTensor)
 
 // answer: the same as the C++ typedefs, but we still have to redefine them
 
-%template() faiss::CMin<float, long>;
-%template() faiss::CMin<int, long>;
-%template() faiss::CMax<float, long>;
-%template() faiss::CMax<int, long>;
+%template() faiss::CMin<float, int64_t>;
+%template() faiss::CMin<int, int64_t>;
+%template() faiss::CMax<float, int64_t>;
+%template() faiss::CMax<int, int64_t>;
 
-%template(float_minheap_array_t) faiss::HeapArray<faiss::CMin<float, long> >;
-%template(int_minheap_array_t) faiss::HeapArray<faiss::CMin<int, long> >;
+%template(float_minheap_array_t) faiss::HeapArray<faiss::CMin<float, int64_t> >;
+%template(int_minheap_array_t) faiss::HeapArray<faiss::CMin<int, int64_t> >;
 
-%template(float_maxheap_array_t) faiss::HeapArray<faiss::CMax<float, long> >;
-%template(int_maxheap_array_t) faiss::HeapArray<faiss::CMax<int, long> >;
+%template(float_maxheap_array_t) faiss::HeapArray<faiss::CMax<float, int64_t> >;
+%template(int_maxheap_array_t) faiss::HeapArray<faiss::CMax<int, int64_t> >;
 
 
 /*******************************************************************
@@ -837,7 +926,8 @@ int * cast_integer_to_int_ptr (long x) {
 %ignore faiss::IDSelectorBatch::bloom;
 
 %ignore faiss::InterruptCallback::instance;
-%include "AuxIndexStructures.h"
+%ignore faiss::InterruptCallback::lock;
+%include  <faiss/impl/AuxIndexStructures.h>
 
 %{
 // may be useful for lua code launched in background from shell
@@ -857,16 +947,16 @@ void ignore_SIGTTIN();
 // represents not found values as -1 like in the Index implementation
 
 struct MapLong2Long {
-    std::unordered_map<long, long> map;
+    std::unordered_map<int64_t, int64_t> map;
 
-    void add(size_t n, const long *keys, const long *vals) {
+    void add(size_t n, const int64_t *keys, const int64_t *vals) {
         map.reserve(map.size() + n);
         for (size_t i = 0; i < n; i++) {
             map[keys[i]] = vals[i];
         }
     }
 
-    long search(long key) {
+    long search(int64_t key) {
         if (map.count(key) == 0) {
             return -1;
         } else {
@@ -874,7 +964,7 @@ struct MapLong2Long {
         }
     }
 
-    void search_multiple(size_t n, const long *keys, long * vals) {
+    void search_multiple(size_t n, int64_t *keys, int64_t * vals) {
         for (size_t i = 0; i < n; i++) {
             vals[i] = search(keys[i]);
         }
@@ -884,10 +974,8 @@ struct MapLong2Long {
 %}
 
 %inline %{
-
     void wait() {
-        // in gdb
-        // set variable i = 1
+        // in gdb, use return to get out of this function
         for(int i = 0; i == 0; i += 0);
     }
  %}

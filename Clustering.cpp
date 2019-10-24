@@ -7,17 +7,19 @@
 
 // -*- c++ -*-
 
-#include "Clustering.h"
-#include "AuxIndexStructures.h"
+#include <faiss/Clustering.h>
+#include <faiss/impl/AuxIndexStructures.h>
 
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 
-#include "utils.h"
-#include "FaissAssert.h"
-#include "IndexFlat.h"
+#include <faiss/utils/utils.h>
+#include <faiss/utils/random.h>
+#include <faiss/utils/distances.h>
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/IndexFlat.h>
 
 namespace faiss {
 
@@ -44,7 +46,7 @@ Clustering::Clustering (int d, int k, const ClusteringParameters &cp):
 
 
 
-static double imbalance_factor (int n, int k, long *assign) {
+static double imbalance_factor (int n, int k, int64_t *assign) {
     std::vector<int> hist(k, 0);
     for (int i = 0; i < n; i++)
         hist[assign[i]]++;

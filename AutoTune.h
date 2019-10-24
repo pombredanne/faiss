@@ -12,9 +12,10 @@
 
 #include <vector>
 #include <unordered_map>
+#include <stdint.h>
 
-#include "Index.h"
-#include "IndexBinary.h"
+#include <faiss/Index.h>
+#include <faiss/IndexBinary.h>
 
 namespace faiss {
 
@@ -87,7 +88,7 @@ struct OperatingPoint {
     double perf;     ///< performance measure (output of a Criterion)
     double t;        ///< corresponding execution time (ms)
     std::string key; ///< key that identifies this op pt
-    long cno;        ///< integer identifer
+    int64_t cno;        ///< integer identifer
 };
 
 struct OperatingPoints {
@@ -192,7 +193,7 @@ struct ParameterSpace {
      * @param index   index to run on
      * @param xq      query vectors (size nq * index.d)
      * @param crit    selection criterion
-     * @param ops     resutling operating points
+     * @param ops     resulting operating points
      */
     void explore (Index *index,
                   size_t nq, const float *xq,
@@ -200,55 +201,6 @@ struct ParameterSpace {
                   OperatingPoints * ops)  const;
 
     virtual ~ParameterSpace () {}
-};
-
-/** Build and index with the sequence of processing steps described in
- *  the string. */
-Index *index_factory (int d, const char *description,
-                      MetricType metric = METRIC_L2);
-
-IndexBinary *index_binary_factory (int d, const char *description);
-
-
-/** Reports some statistics on a dataset and comments on them.
- *
- * It is a class rather than a function so that all stats can also be
- * accessed from code */
-
-struct MatrixStats {
-    MatrixStats (size_t n, size_t d, const float *x);
-    std::string comments;
-
-    // raw statistics
-    size_t n, d;
-    size_t n_collision, n_valid, n0;
-    double min_norm2, max_norm2;
-
-    struct PerDimStats {
-        size_t n, n_nan, n_inf, n0;
-
-        float min, max;
-        double sum, sum2;
-
-        size_t n_valid;
-        double mean, stddev;
-
-        PerDimStats();
-        void add (float x);
-        void compute_mean_std ();
-    };
-
-    std::vector<PerDimStats> per_dim_stats;
-    struct Occurrence {
-        size_t first;
-        size_t count;
-    };
-    std::unordered_map<uint64_t, Occurrence> occurrences;
-
-    char *buf;
-    size_t nbuf;
-    void do_comment (const char *fmt, ...);
-
 };
 
 

@@ -8,16 +8,17 @@
 // -*- c++ -*-
 
 
-#include "IndexIVFSpectralHash.h"
+#include <faiss/IndexIVFSpectralHash.h>
 
 #include <memory>
 #include <algorithm>
+#include <stdint.h>
 
-#include "hamming.h"
-#include "utils.h"
-#include "FaissAssert.h"
-#include "AuxIndexStructures.h"
-#include "VectorTransform.h"
+#include <faiss/utils/hamming.h>
+#include <faiss/utils/utils.h>
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/AuxIndexStructures.h>
+#include <faiss/VectorTransform.h>
 
 namespace faiss {
 
@@ -160,10 +161,13 @@ void binarize_with_freq(size_t nbit, float freq,
 
 void IndexIVFSpectralHash::encode_vectors(idx_t n, const float* x_in,
                                           const idx_t *list_nos,
-                                          uint8_t * codes) const
+                                          uint8_t * codes,
+                                          bool include_listnos) const
 {
     FAISS_THROW_IF_NOT (is_trained);
     float freq = 2.0 / period;
+
+    FAISS_THROW_IF_NOT_MSG (!include_listnos, "listnos encoding not supported");
 
     // transform with vt
     std::unique_ptr<float []> x (vt->apply (n, x_in));
@@ -175,7 +179,7 @@ void IndexIVFSpectralHash::encode_vectors(idx_t n, const float* x_in,
         // each thread takes care of a subset of lists
 #pragma omp for
         for (size_t i = 0; i < n; i++) {
-            long list_no = list_nos [i];
+            int64_t list_no = list_nos [i];
 
             if (list_no >= 0) {
                 const float *c;
@@ -266,7 +270,7 @@ struct IVFScanner: InvertedListScanner {
 
             if (dis < simi [0]) {
                 maxheap_pop (k, simi, idxi);
-                long id = store_pairs ? (list_no << 32 | j) : ids[j];
+                int64_t id = store_pairs ? (list_no << 32 | j) : ids[j];
                 maxheap_push (k, simi, idxi, dis, id);
                 nup++;
             }
@@ -284,7 +288,7 @@ struct IVFScanner: InvertedListScanner {
         for (size_t j = 0; j < list_size; j++) {
             float dis = hc.hamming (codes);
             if (dis < radius) {
-                long id = store_pairs ? (list_no << 32 | j) : ids[j];
+                int64_t id = store_pairs ? (list_no << 32 | j) : ids[j];
                 res.add (dis, id);
             }
             codes += code_size;

@@ -62,8 +62,11 @@ class Randu10kUnbalanced(Randu10k):
         rs = np.random.RandomState(123)
         weights = weights[rs.permutation(self.d)]
         self.xb *= weights
+        self.xb /= np.linalg.norm(self.xb, axis=1)[:, np.newaxis]
         self.xq *= weights
+        self.xq /= np.linalg.norm(self.xq, axis=1)[:, np.newaxis]
         self.xt *= weights
+        self.xt /= np.linalg.norm(self.xt, axis=1)[:, np.newaxis]
 
         dotprods = np.dot(self.xq, self.xb.T)
         self.gt = dotprods.argmax(1)
@@ -79,7 +82,7 @@ def get_dataset(d, nb, nt, nq):
     return (xt, xb, xq)
 
 
-def get_dataset_2(d, nb, nt, nq):
+def get_dataset_2(d, nt, nb, nq):
     """A dataset that is not completely random but still challenging to
     index
     """
@@ -93,4 +96,4 @@ def get_dataset_2(d, nb, nt, nq):
     x = x * (rs.rand(d) * 4 + 0.1)
     x = np.sin(x)
     x = x.astype('float32')
-    return x[:nt], x[nt:-nq], x[-nq:]
+    return x[:nt], x[nt:nt + nb], x[nt + nb:]

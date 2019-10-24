@@ -12,7 +12,7 @@
 
 #include <vector>
 
-#include "IndexBinary.h"
+#include <faiss/IndexBinary.h>
 
 namespace faiss {
 
@@ -43,7 +43,7 @@ struct IndexBinaryFlat : IndexBinary {
   /** Remove some ids. Note that because of the indexing structure,
    * the semantics of this operation are different from the usual ones:
    * the new ids are shifted. */
-  long remove_ids(const IDSelector& sel) override;
+  size_t remove_ids(const IDSelector& sel) override;
 
   IndexBinaryFlat() {}
 };

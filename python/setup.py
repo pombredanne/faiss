@@ -16,6 +16,11 @@ os.mkdir("faiss")
 shutil.copyfile("faiss.py", "faiss/__init__.py")
 shutil.copyfile("swigfaiss.py", "faiss/swigfaiss.py")
 shutil.copyfile("_swigfaiss.so", "faiss/_swigfaiss.so")
+try:
+    shutil.copyfile("swigfaiss_avx2.py", "faiss/swigfaiss_avx2.py")
+    shutil.copyfile("_swigfaiss_avx2.so", "faiss/_swigfaiss_avx2.so")
+except:
+    pass
 
 long_description="""
 Faiss is a library for efficient similarity search and clustering of dense
@@ -27,7 +32,7 @@ are implemented on the GPU. It is developed by Facebook AI Research.
 """
 setup(
     name='faiss',
-    version='1.5.2',
+    version='1.6.0',
     description='A library for efficient similarity search and clustering of dense vectors',
     long_description=long_description,
     url='https://github.com/facebookresearch/faiss',

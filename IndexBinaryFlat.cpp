@@ -7,14 +7,14 @@
 
 // -*- c++ -*-
 
-#include "IndexBinaryFlat.h"
+#include <faiss/IndexBinaryFlat.h>
 
 #include <cstring>
-#include "hamming.h"
-#include "utils.h"
-#include "Heap.h"
-#include "FaissAssert.h"
-#include "AuxIndexStructures.h"
+#include <faiss/utils/hamming.h>
+#include <faiss/utils/utils.h>
+#include <faiss/utils/Heap.h>
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/AuxIndexStructures.h>
 
 namespace faiss {
 
@@ -55,7 +55,7 @@ void IndexBinaryFlat::search(idx_t n, const uint8_t *x, idx_t k,
   }
 }
 
-long IndexBinaryFlat::remove_ids(const IDSelector& sel) {
+size_t IndexBinaryFlat::remove_ids(const IDSelector& sel) {
   idx_t j = 0;
   for (idx_t i = 0; i < ntotal; i++) {
     if (sel.is_member(i)) {

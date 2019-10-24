@@ -12,7 +12,7 @@
 
 #include <vector>
 
-#include "Index.h"
+#include <faiss/Index.h>
 
 
 namespace faiss {
@@ -59,11 +59,23 @@ struct IndexFlat: Index {
             const idx_t *labels) const;
 
     /** remove some ids. NB that Because of the structure of the
-     * indexing structre, the semantics of this operation are
+     * indexing structure, the semantics of this operation are
      * different from the usual ones: the new ids are shifted */
-    long remove_ids(const IDSelector& sel) override;
+    size_t remove_ids(const IDSelector& sel) override;
 
     IndexFlat () {}
+
+    DistanceComputer * get_distance_computer() const override;
+
+    /* The stanadlone codec interface (just memcopies in this case) */
+    size_t sa_code_size () const override;
+
+    void sa_encode (idx_t n, const float *x,
+                          uint8_t *bytes) const override;
+
+    void sa_decode (idx_t n, const uint8_t *bytes,
+                            float *x) const override;
+
 };
 
 

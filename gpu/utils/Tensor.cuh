@@ -358,7 +358,7 @@ bool canUseIndexType() {
 
 template <typename IndexType, typename T, typename... U>
 bool canUseIndexType(const T& arg, const U&... args) {
-  return arg.template canUseIndexType<IndexType>() &&
+  return arg.template canUseIndexType() &&
     canUseIndexType(args...);
 }
 
@@ -648,4 +648,4 @@ const detail::SubTensor<Tensor<T, Dim, InnerContig, IndexT, PtrTraits>,
 
 } } // namespace
 
-#include "Tensor-inl.cuh"
+#include <faiss/gpu/utils/Tensor-inl.cuh>
